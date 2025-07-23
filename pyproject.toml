@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "pdate_cli"
+version = "0.1.0"
+description = "PDate converts dates to human-readable formats."
+authors = ["Hunter Gatewood <hgatewood@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.scripts]
+pdate = "pdate_cli.cli:cli"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.0.0"
+dateparser = "^1.2.2"
+humanize = "^4.12.3"
+python-dateutil = "^2.8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
