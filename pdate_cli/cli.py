@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Optional
 
 import click
 import dateparser
@@ -53,13 +53,13 @@ class FmtOpts:
 @dataclass
 class PrintableDate:
     date: datetime
-    str: str
+    formatted: str
 
     def __bool__(self):
-        return bool(self.str)
+        return bool(self.formatted)
 
     def __str__(self):
-        return self.str
+        return self.formatted
 
 
 ParseFn = Callable[[str, ParseOpts], datetime]
@@ -74,7 +74,7 @@ def make_stripped(p: ParseFn) -> ParseFn:
 
 def parse_dateparser(arg: str, opts: ParseOpts) -> datetime:
     dt = dateparser.parse(arg)
-    if not dt:
+    if dt is None:
         raise ValueError(f"could not parse date: {arg}")
     if dt.tzinfo is None and not opts.local:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -83,7 +83,7 @@ def parse_dateparser(arg: str, opts: ParseOpts) -> datetime:
 
 def parse_dateutil(arg: str, opts: ParseOpts) -> datetime:
     dt = dateutil.parser.parse(arg)
-    if not dt:
+    if dt is None:
         raise ValueError(f"could not parse date: {arg}")
     if dt.tzinfo is None and not opts.local:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -142,11 +142,10 @@ def cli(arg: list[str], now: bool, ts: bool, date: bool, human: bool, precise: b
 
     \b
     Timezone considerations
-    - For dates without timezone info, UTC is assumed
-    - For timestamps, local timezone is assumed
+    - For inputs without timezone info, local timezone is assumed by default, but can be changed to UTC with --utc
     """
     if arg and now:
-        raise click.ClickException("cannot set both ARG and --stdin")
+        raise click.ClickException("cannot set both ARG and --now")
 
     parse_opts = ParseOpts(local=local)
     fmt_opts = FmtOpts(Fmt(ts, date, human, precise, default=Fmt.E.DATE), use_am_pm=use_am_pm)
@@ -166,10 +165,9 @@ def cli(arg: list[str], now: bool, ts: bool, date: bool, human: bool, precise: b
 
 def handle_arg(arg: str, parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool):
     parsed = get_parsed(arg, parse_opts, fmt_opts, verbose)
-    if parsed:
-        click.echo(parsed)
-    else:
+    if parsed is None:
         raise click.ClickException("could not parse input")
+    click.echo(parsed)
 
 
 def handle_stdin(lines: Iterator[str], parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool):
@@ -181,7 +179,7 @@ def handle_stdin_sorted(lines: list[str], parse_opts: ParseOpts, fmt_opts: FmtOp
     parsed = []
     for line in lines:
         p = get_parsed(line, parse_opts, fmt_opts, verbose)
-        if not p:
+        if p is None:
             click.echo(f"Failed to parse: {line}", err=True)
             continue
         parsed.append(p)
@@ -194,12 +192,13 @@ def handle_no_arg(opts: FmtOpts):
     click.echo(get_current(opts))
 
 
-def parse(arg: str, *, local: bool = True, verbose: bool = False) -> datetime:
+def parse(arg: str, *, local: bool = True, verbose: bool = False) -> Optional[datetime]:
     """Parse an input string into a datetime object. Uses the same parsing logic as the CLI."""
-    return first(arg, DefaultParsers, ParseOpts(local), FmtOpts(Fmt(False, True, False, False, default=Fmt.E.DATE), use_am_pm=False), verbose=verbose).date
+    printable_dt = first(arg, DefaultParsers, ParseOpts(local), FmtOpts(Fmt(False, True, False, False, default=Fmt.E.DATE), use_am_pm=False), verbose=verbose)
+    return printable_dt.date if printable_dt else None
 
 
-def get_parsed(arg: str, parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool) -> PrintableDate:
+def get_parsed(arg: str, parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool) -> Optional[PrintableDate]:
     return first(arg, DefaultParsers, parse_opts, fmt_opts, verbose)
 
 
@@ -229,7 +228,7 @@ def fmt_date(dt: datetime, opts: FmtOpts) -> str:
     return "\n".join(strs)
 
 
-def first(arg: str, parsers: list[Parser], parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool) -> PrintableDate:
+def first(arg: str, parsers: list[Parser], parse_opts: ParseOpts, fmt_opts: FmtOpts, verbose: bool) -> Optional[PrintableDate]:
     for parser in parsers:
         try:
             dt = parser.fn(arg, parse_opts)
@@ -240,7 +239,7 @@ def first(arg: str, parsers: list[Parser], parse_opts: ParseOpts, fmt_opts: FmtO
             if verbose:
                 click.echo(f"Failed to parse as {parser.name}: {e}", err=True)
             continue
-    return PrintableDate(datetime.fromtimestamp(0), "")
+    return None
 
 
 if __name__ == "__main__":
