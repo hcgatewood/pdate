@@ -58,6 +58,13 @@ Monday, November 25, 2024 02:10:46 PM CST
 Monday, November 25, 2024 02:10:46 PM CST
 ```
 
+### Library usage
+
+```python
+from pdate_cli.cli import parse
+print(parse("10 minutes ago"))
+```
+
 ## Help pages
 
 ```text
